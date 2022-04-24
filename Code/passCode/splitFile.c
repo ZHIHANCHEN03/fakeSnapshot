@@ -47,7 +47,7 @@ int main() {
             perror( "create failed" );
             return EXIT_FAILURE;       /* exit( EXIT_FAILURE ); */
         }
-        write( fd2, buffer, DATA_SIZE);
+        write( fd2, buffer, DATA_SIZE );
         printf("Write to the file %s with %d count(s)\n", tmpname, fileCount);
 
         free(uuid);
