@@ -34,7 +34,7 @@ int main() {
         fileCount++;
 
         uuid_generate_random(binuuid);
-        char * uuid = malloc(37);
+        char * uuid = (char *) malloc(37);
         uuid_unparse(binuuid, uuid);
 
         char tmpname[50];

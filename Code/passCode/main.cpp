@@ -5,23 +5,15 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <ctype.h> 
+#include <uuid/uuid.h>
 #include <string.h>
 
 #define WRITE "WRITE"
 #define DELETE "DELETE"
 #define BREAK "BREAK"
-#define DISK_SIZE 4294967296
-#define AVAILABLE_SIZE 1073741824
-#define BUFFER_SIZE 4096
 #define PARALLEL_INPUT_SIZE 100
 
 int main() {
-    printf("Start to open disk [Fake disk based on ./data/fakeDisk.dat\n");
-
-    FILE * fp;
-    const char * fakeDisk = "./data/fakeDisk.dat";
-    fp = fopen( fakeDisk, "r+");
-
     while ( 1 ) {
         char writeOrDeleteInput[5];
         printf("Write Or Delete or Break: \n");
@@ -68,6 +60,12 @@ int main() {
             }
         }
     }
-
-    fclose(fp);
 }
+
+// char * covertToUppercase(char * inputString) {
+//     char returnString[strlen(inputString)];
+//     for (int i = 0; i < strlen(inputString); i++) {
+//         returnString[i] = toupper(inputString[i]);
+//     }
+//     return returnString;
+// }

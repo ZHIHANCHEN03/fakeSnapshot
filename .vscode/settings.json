@@ -1,5 +1,11 @@
 {
   "files.associations": {
-    "unistd.h": "c"
+    "unistd.h": "c",
+    "iostream": "cpp",
+    "__split_buffer": "cpp",
+    "typeinfo": "cpp",
+    "vector": "cpp",
+    "memory": "c",
+    "utility": "c"
   }
 }
