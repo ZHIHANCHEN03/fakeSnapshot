@@ -1,7 +1,23 @@
+#include <stdio.h>
+#include "btree.h"
+#include "bit_array.h"
+
+
 #ifndef FAKEDISK_H
 #define FAKEDISK_H
 
-struct fakeDisk;
+struct fakeDisk
+{
+    int maxParallelSize;
+    long int availableUsage;
+    long int totalUsage;
+    long int currentUsage;
+    int currentSnapshotVer;
+    FILE * fp;
+    struct btree * tr;
+    BIT_ARRAY * bitmapForUser;
+    BIT_ARRAY * bitmapForReal;
+};
 
 struct fakeDisk *fakeDisk(const char *aFakeDiskName, long int aAvailableUsage, long int aTotalUsage);
 long int getUseage(struct fakeDisk *fakeDisk);
