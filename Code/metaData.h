@@ -4,9 +4,9 @@
 #define METADATA_H
 
 struct metaData {
-    char * fakeOffset;
-    char * realOffset;
-    char * snapshotVer;
+    long int fakeOffset;
+    long int realOffset;
+    int snapshotVer;
 };
 
 int metaData_compare(const void *a, const void *b, void *udata);
