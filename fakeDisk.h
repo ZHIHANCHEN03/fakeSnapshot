@@ -19,7 +19,7 @@ struct fakeDisk
     BIT_ARRAY * bitmapForReal;
 };
 
-struct fakeDisk *fakeDisk(const char *aFakeDiskName, long int aAvailableUsage, long int aTotalUsage);
+struct fakeDisk * fakeDisk(const char *aFakeDiskName, long int aAvailableUsage, long int aTotalUsage);
 long int getUseage(struct fakeDisk *fakeDisk);
 long int getLeftSpace(struct fakeDisk *fakeDisk);
 char * getCurrentSnapshot(struct fakeDisk *fakeDisk);

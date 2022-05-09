@@ -22,7 +22,7 @@ struct fakeDisk
     BIT_ARRAY *bitmapForReal;
 };
 
-struct fakeDisk *create_fakeDisk(char *aFakeDiskName, long int aAvailableUsage, long int aTotalUsage)
+struct fakeDisk * create_fakeDisk(char *aFakeDiskName, long int aAvailableUsage, long int aTotalUsage)
 {
     int LBABlockSize = LBA_BLOCK_SIZE;
     struct fakeDisk *newFakeDisk = (struct fakeDisk *)malloc(sizeof(struct fakeDisk));

@@ -20,7 +20,7 @@ Basic
 
 Constructor - create a new fake disk for CRUD with snapshot
 
-    struct fakeDisk *create_fakeDisk(char *aFakeDiskName, long int aAvailableUsage, long int aTotalUsage)
+    struct fakeDisk * create_fakeDisk(char *aFakeDiskName, long int aAvailableUsage, long int aTotalUsage)
 
 Destructor - free the memory used for a fake disk
 
