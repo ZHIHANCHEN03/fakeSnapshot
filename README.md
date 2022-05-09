@@ -85,5 +85,5 @@ https://github.com/tidwall/btree.c
 License
 =======
 
-fakeSnapshot source code is available under the MIT License.
+fakeSnapshot source code is available under the GPL-3.0 license.
 
