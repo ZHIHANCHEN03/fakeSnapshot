@@ -1,8 +1,7 @@
-**FakeSnapshot**
+**fakeSnapshot**
 ==================
 
 https://github.com/ZHIHANCHEN03/fakeSnapshot/  
-License: Public Domain, no warranty
 
 About
 ==================
@@ -86,5 +85,5 @@ https://github.com/tidwall/btree.c
 License
 =======
 
-fakeSnapshot source code is available under the MIT License
+fakeSnapshot source code is available under the MIT License.
 
