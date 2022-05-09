@@ -5,27 +5,9 @@
 #include <stdint.h>
 #include "btree.h"
 #include "metaData.h"
+#include "bit_array.h"
 
 #define LBA_BLOCK_SIZE 4096;
-
-// For constructing the basic logic of bitmap
-typedef uint32_t bitmap_t;
-enum { BITS_PER_WORD = sizeof(bitmap_t) * CHAR_BIT };
-#define WORD_OFFSET(b) ((b) / BITS_PER_WORD)
-#define BIT_OFFSET(b)  ((b) % BITS_PER_WORD)
-
-void set_bit(bitmap_t *bitmap, int n) { 
-    bitmap[WORD_OFFSET(n)] |= (1 << BIT_OFFSET(n));
-}
-
-void clear_bit(bitmap_t *bitmap, int n) {
-    bitmap[WORD_OFFSET(n)] &= ~(1 << BIT_OFFSET(n)); 
-}
-
-int get_bit(bitmap_t *bitmap, int n) {
-    bitmap_t bit = bitmap[WORD_OFFSET(n)] & (1 << BIT_OFFSET(n));
-    return bit != 0; 
-}
 
 struct fakeDisk
 {
@@ -36,8 +18,8 @@ struct fakeDisk
     int currentSnapshotVer;
     FILE * fp;
     struct btree * tr;
-    int * bitmapForUser;
-    int * bitmapForWhole;
+    BIT_ARRAY * bitmapForUser;
+    BIT_ARRAY * bitmapForReal;
 };
 
 struct fakeDisk * create_fakeDisk( char * aFakeDiskName, long int aAvailableUsage, long int aTotalUsage ) {
@@ -51,45 +33,28 @@ struct fakeDisk * create_fakeDisk( char * aFakeDiskName, long int aAvailableUsag
         newFakeDisk->currentSnapshotVer = 1;
         newFakeDisk->fp = fopen( aFakeDiskName, "r+" );
         newFakeDisk->tr = btree_new(sizeof(struct metaData), 0, metaData_compare, NULL);
-        newFakeDisk->bitmapForUser = malloc(floor((float) newFakeDisk->availableUsage / LBABlockSize));
-        newFakeDisk->bitmapForWhole = malloc(floor((float) newFakeDisk->totalUsage / LBABlockSize));
+        newFakeDisk->bitmapForUser = bit_array_create(floor((float) aAvailableUsage / LBABlockSize));
+        newFakeDisk->bitmapForReal = bit_array_create(floor((float) aTotalUsage / LBABlockSize));
     }
     return newFakeDisk;    
 }
 
-// find the single empty offset based on the whole disk range
-int findASingalEmptyOffset(struct fakeDisk * fakeDisk) {
+// find the single empty offset based on the user disk range
+int findSingalEmptyOffsetForUser(struct fakeDisk * fakeDisk) {
     int LBABlockSize = LBA_BLOCK_SIZE;
-    int * bitmap = fakeDisk->bitmapForWhole;
-    int totalNumOfRealBlocks = fakeDisk->totalUsage / LBABlockSize;
-    for (int i = 0; i < totalNumOfRealBlocks; i++) {
-        if (get_bit(bitmap, i) == 0) {
-            set_bit(bitmap, i);
-            return i * LBABlockSize;
-        }
-    }
-    return -1;
+    BIT_ARRAY * BIT_MAP = fakeDisk->bitmapForUser;
+    bit_index_t result = -1;
+    bit_array_find_first_set_bit(BIT_MAP, &result);
+    return (int) result * LBABlockSize;
 }
 
-// find the several empty offsets based on user disk range,
-// then call findAsingalEmptyOffset for finding the real disk block for writing
-int * findEmptyOffsets(struct fakeDisk * fakeDisk, int requiredNumOfBlock) {
+// find the single empty offset based on the user disk range
+int findSingalEmptyOffsetForDisk(struct fakeDisk * fakeDisk) {
     int LBABlockSize = LBA_BLOCK_SIZE;
-    int * bitmap = fakeDisk->bitmapForUser;
-    int totalNumOfRealBlocks = fakeDisk->totalUsage / LBABlockSize;
-    int offsets[requiredNumOfBlock];
-    
-    int u = 0;
-    for (int i = 0; i < requiredNumOfBlock; i++) {
-        if (get_bit(bitmap, i) == 0) {
-            set_bit(bitmap, i);
-            offsets[u] = i * LBABlockSize;
-            if (u == requiredNumOfBlock) {
-                return offsets;
-            }
-        }
-    }
-    return NULL;
+    BIT_ARRAY * BIT_MAP = fakeDisk->bitmapForReal;
+    bit_index_t result = -1;
+    bit_array_find_first_set_bit(BIT_MAP, &result);
+    return (int) result * LBABlockSize;
 }
 
 // only delete the data in the real offset (in the real disk range)
@@ -110,7 +75,7 @@ int getCurrentSnapshot(struct fakeDisk * fakeDisk) {
 }
 
 // write the data into the disk
-// allcate the area for the whole disk location for real writing based on the designed Offset (in the user disk range)
+// allcate the area in real disk range for real writing based on the designed Offset (in the user disk range)
 void writeData(struct fakeDisk * fakeDisk, long int designedOffset, long int writeBytes, char * bufferPointer) {
     int LBABlockSize = LBA_BLOCK_SIZE;
     if (designedOffset%LBABlockSize != 0 || designedOffset >= fakeDisk->totalUsage) {
@@ -121,12 +86,17 @@ void writeData(struct fakeDisk * fakeDisk, long int designedOffset, long int wri
     struct btree * tr = fakeDisk->tr;
     int currentSnapshotVer = fakeDisk->currentSnapshotVer;
     FILE * fp = fakeDisk->fp;
-    // char buffer[4096] = *bufferPointer;
 
     struct metaData * metaData;
     metaData = btree_get(tr, &(struct metaData){ .fakeOffset=designedOffset, .snapshotVer=currentSnapshotVer });
     if (!(metaData && metaData->snapshotVer == currentSnapshotVer)) {
-        int newWriteRealOffset = findASingalEmptyOffset(fakeDisk);
+        int newWriteRealOffset = findSingalEmptyOffsetForDisk(fakeDisk);
+        if (newWriteRealOffset < 0) {
+            printf("No Enough Space For New Writing: Real");
+            free(tr);
+            free(fp);
+            return;
+        }
         btree_set(tr, &(struct metaData){ .fakeOffset=designedOffset, .realOffset=newWriteRealOffset, .snapshotVer=currentSnapshotVer });
         fseek(fp, newWriteRealOffset, SEEK_SET);
         fwrite(*bufferPointer, sizeof(*bufferPointer), sizeof(char), fp);
@@ -148,13 +118,16 @@ void writeData(struct fakeDisk * fakeDisk, long int designedOffset, long int wri
 void randomWriteData(struct fakeDisk * fakeDisk, long int writeBytes, char * bufferPointer) {
     int LBABlockSize = LBA_BLOCK_SIZE;
     int requiredLBAs = floor((float) writeBytes / LBABlockSize);
-    int * writeBlocks = findEmptyOffsets(fakeDisk, requiredLBAs);
-    for (int i = 0; i < requiredLBAs; i++) {
-        writeData(fakeDisk, writeBlocks[i], LBABlockSize, bufferPointer+(i*LBABlockSize));
-    }
-    fakeDisk->currentUsage = fakeDisk->currentUsage + requiredLBAs * LBABlockSize;
 
-    free(writeBlocks);
+    for (int i = 0; i < requiredLBAs; i++) {
+        int newWriteUserOffset = findSingalEmptyOffsetForUser(fakeDisk);
+        if (newWriteUserOffset >= 0) {
+            writeData(fakeDisk, newWriteUserOffset, LBABlockSize, bufferPointer+(i*LBABlockSize));
+        } else {
+            printf("No Enough Space For New Writing: User");
+            break;
+        }
+    }
 }
 
 // delete data from the disk
@@ -172,7 +145,7 @@ void deleteData(struct fakeDisk * fakeDisk, long int designedOffset) {
 
     struct metaData * metaData;
     metaData = btree_get(tr, &(struct metaData){ .fakeOffset=designedOffset, .snapshotVer=currentSnapshotVer });
-    if (metaData && metaData->snapshotVer == currentSnapshotVer) {
+    if (metaData) {
         int realOffset = metaData->realOffset;
         lightReinitializeData(fp, realOffset);
         fseek(fp, realOffset, SEEK_SET);
@@ -184,8 +157,72 @@ void deleteData(struct fakeDisk * fakeDisk, long int designedOffset) {
     free(fp);
 }
 
-void deleteSnapshotVer(struct fakeDisk * fakeDisk, int snapshotVer) {
-    
+char * readData(struct fakeDisk * fakeDisk, long int designedOffset) {
+    int LBABlockSize = LBA_BLOCK_SIZE;
+    if (designedOffset%LBABlockSize != 0 || designedOffset >= fakeDisk->totalUsage) {
+        printf("Invalid Disk Offset\n");
+        return;
+    }
+
+    char buffer[LBABlockSize];
+    struct btree * tr = fakeDisk->tr;
+    int currentSnapshotVer = fakeDisk->currentSnapshotVer;
+    FILE * fp = fakeDisk->fp;
+
+    struct metaData * metaData;
+    metaData = btree_get(tr, &(struct metaData){ .fakeOffset=designedOffset, .snapshotVer=currentSnapshotVer });
+    if (metaData) {
+        int realOffset = metaData->realOffset;
+        fseek(fp, realOffset, SEEK_SET);
+        fread(buffer, LBABlockSize, sizeof(char), fp);
+    }
+
+    free(tr);
+    free(fp);
+    return buffer;
+}
+
+void rollbackToSnapshotVer(struct fakeDisk * fakeDisk, int designedSnapshotVer) {
+    if (designedSnapshotVer >= fakeDisk->currentSnapshotVer) {
+        printf("Invalid Snapshot Ver, Max Snapshot Ver Should Be Less Than %d", fakeDisk->currentSnapshotVer);
+        return;
+    }
+
+    struct btree * tr = fakeDisk->tr;
+    BIT_ARRAY * bitarr = fakeDisk->bitmapForUser;
+    FILE * fp = fakeDisk->fp;
+    int currentSnapshotVer = fakeDisk->currentSnapshotVer;
+
+    int currentFirstOffsetForUserDisk;
+    bit_array_find_first_set_bit(bitarr, &currentFirstOffsetForUserDisk);
+    int currentLastOffsetForUserDisk;
+    bit_array_find_last_set_bit(bitarr, &currentLastOffsetForUserDisk);
+
+    int currentReadingOffsetForUserDisk = currentFirstOffsetForUserDisk;
+    while (true) {
+
+        for (int i = designedSnapshotVer+1; i < currentSnapshotVer; i++) {
+            struct metaData * metaData;
+            metaData = btree_get(tr, &(struct metaData){ .fakeOffset=currentReadingOffsetForUserDisk, .snapshotVer=i });
+            if (metaData) {
+                int realOffset = metaData->realOffset;
+                lightReinitializeData(fp, realOffset);
+                fseek(fp, realOffset, SEEK_SET);
+                fakeDisk->currentUsage = fakeDisk->currentUsage - LBA_BLOCK_SIZE;
+                btree_delete(tr, &(struct metaData){ .fakeOffset=currentReadingOffsetForUserDisk, .snapshotVer=i });
+            }
+        }
+
+        if (currentReadingOffsetForUserDisk == currentLastOffsetForUserDisk) {
+            break;
+        }
+
+        bit_array_find_next_set_bit(bitarr, currentReadingOffsetForUserDisk+1, &currentReadingOffsetForUserDisk);
+    }
+
+    free(tr);
+    free(bitarr);
+    free(fp);
 }
 
 void instantSnapshot(struct fakeDisk * fakeDisk) {
@@ -197,6 +234,10 @@ void freeFakeDisk(struct fakeDisk * fakeDisk) {
     free(fakeDisk->fp);
     btree_free(fakeDisk->tr);
     free(fakeDisk->tr);
+    bit_array_free(fakeDisk->bitmapForUser);
+    free(fakeDisk->bitmapForUser);
+    bit_array_free(fakeDisk->bitmapForReal);
+    free(fakeDisk->bitmapForReal);
 }
 
 
